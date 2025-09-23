@@ -96,6 +96,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get expiring subscriptions - MUST come before /:id route
+  app.get("/api/subscriptions/expiring", requireAuth, async (req: any, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 30; // Default to 30 days
+      const expiringSubscriptions = await storage.getExpiringSubscriptions(req.session.userEmail, days);
+      res.json(expiringSubscriptions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch expiring subscriptions" });
+    }
+  });
+
   app.get("/api/subscriptions/:id", requireAuth, async (req: any, res) => {
     try {
       const subscription = await storage.getSubscription(req.params.id, req.session.userEmail);
@@ -157,16 +168,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get expiring subscriptions
-  app.get("/api/subscriptions/expiring", requireAuth, async (req: any, res) => {
-    try {
-      const days = parseInt(req.query.days as string) || 30; // Default to 30 days
-      const expiringSubscriptions = await storage.getExpiringSubscriptions(req.session.userEmail, days);
-      res.json(expiringSubscriptions);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch expiring subscriptions" });
-    }
-  });
 
   // One-click subscription from marketplace
   app.post("/api/subscriptions/subscribe", requireAuth, async (req: any, res) => {
