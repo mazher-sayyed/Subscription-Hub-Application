@@ -6,8 +6,9 @@ import FilterSidebar from "../components/filter-sidebar";
 import UpcomingRenewals from "../components/upcoming-renewals";
 import SubscriptionCard from "../components/subscription-card";
 import AddSubscriptionDialog from "../components/add-subscription-dialog";
+import UserHeader from "../components/user-header";
 import { Button } from "@/components/ui/button";
-import { CreditCard, Plus, User } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Filters {
@@ -104,34 +105,20 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card border-b border-border shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <CreditCard className="text-primary text-2xl" data-testid="app-logo" />
-              <h1 className="text-2xl font-bold text-foreground" data-testid="app-title">
-                Subscription Management Hub
-              </h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Button 
-                onClick={() => setShowAddDialog(true)}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-                data-testid="button-add-subscription"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add Subscription
-              </Button>
-              <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center" data-testid="user-avatar">
-                <User className="text-muted-foreground h-5 w-5" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+      <UserHeader />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Add Subscription Button */}
+        <div className="mb-6">
+          <Button 
+            onClick={() => setShowAddDialog(true)}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            data-testid="button-add-subscription"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Subscription
+          </Button>
+        </div>
         {/* Metrics Cards */}
         <MetricsCards subscriptions={subscriptions} />
 

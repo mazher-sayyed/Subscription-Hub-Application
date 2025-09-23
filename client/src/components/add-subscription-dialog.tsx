@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -36,18 +36,25 @@ export default function AddSubscriptionDialog({ open, onOpenChange }: AddSubscri
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertSubscription) => {
-      await apiRequest("POST", "/api/subscriptions", data);
-    },
-    onSuccess: () => {
+      const response = await apiRequest("POST", "/api/subscriptions", data);
+      return response.json();
+    }
+  });
+
+  useEffect(() => {
+    if (createMutation.isSuccess) {
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       toast({ title: "Subscription added successfully" });
       form.reset();
       onOpenChange(false);
-    },
-    onError: () => {
+    }
+  }, [createMutation.isSuccess, queryClient, toast, form, onOpenChange]);
+
+  useEffect(() => {
+    if (createMutation.isError) {
       toast({ title: "Failed to add subscription", variant: "destructive" });
     }
-  });
+  }, [createMutation.isError, toast]);
 
   const onSubmit = (data: InsertSubscription) => {
     createMutation.mutate(data);

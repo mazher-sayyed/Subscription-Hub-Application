@@ -52,17 +52,24 @@ export default function EditSubscriptionDialog({ subscription, open, onOpenChang
 
   const updateMutation = useMutation({
     mutationFn: async (data: InsertSubscription) => {
-      await apiRequest("PATCH", `/api/subscriptions/${subscription.id}`, data);
-    },
-    onSuccess: () => {
+      const response = await apiRequest("PATCH", `/api/subscriptions/${subscription.id}`, data);
+      return response.json();
+    }
+  });
+
+  useEffect(() => {
+    if (updateMutation.isSuccess) {
       queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
       toast({ title: "Subscription updated successfully" });
       onOpenChange(false);
-    },
-    onError: () => {
+    }
+  }, [updateMutation.isSuccess, queryClient, toast, onOpenChange]);
+
+  useEffect(() => {
+    if (updateMutation.isError) {
       toast({ title: "Failed to update subscription", variant: "destructive" });
     }
-  });
+  }, [updateMutation.isError, toast]);
 
   const onSubmit = (data: InsertSubscription) => {
     updateMutation.mutate(data);
