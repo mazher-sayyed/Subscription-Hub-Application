@@ -157,6 +157,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get expiring subscriptions
+  app.get("/api/subscriptions/expiring", requireAuth, async (req: any, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 30; // Default to 30 days
+      const expiringSubscriptions = await storage.getExpiringSubscriptions(req.session.userEmail, days);
+      res.json(expiringSubscriptions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch expiring subscriptions" });
+    }
+  });
+
+  // One-click subscription from marketplace
+  app.post("/api/subscriptions/subscribe", requireAuth, async (req: any, res) => {
+    try {
+      const { serviceId, planId } = req.body;
+      
+      if (!serviceId || !planId) {
+        return res.status(400).json({ message: "Service ID and Plan ID are required" });
+      }
+
+      // Get the available service
+      const service = await storage.getAvailableService(serviceId);
+      if (!service) {
+        return res.status(404).json({ message: "Service not found" });
+      }
+
+      // Find the selected plan
+      const selectedPlan = service.plans.find((plan: any) => plan.id === planId);
+      if (!selectedPlan) {
+        return res.status(404).json({ message: "Plan not found" });
+      }
+
+      // Calculate renewal and expiration dates
+      const now = new Date();
+      const renewalDate = new Date(now);
+      const expirationDate = new Date(now);
+      
+      if (selectedPlan.billingCycle === 'annual') {
+        renewalDate.setFullYear(renewalDate.getFullYear() + 1);
+        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+      } else {
+        renewalDate.setMonth(renewalDate.getMonth() + 1);
+        expirationDate.setMonth(expirationDate.getMonth() + 1);
+      }
+      
+      // Create subscription with auto-populated data
+      const subscriptionData = {
+        name: `${service.name} - ${selectedPlan.name}`,
+        category: service.category,
+        cost: selectedPlan.price.toString(),
+        billingCycle: selectedPlan.billingCycle,
+        renewalDate: renewalDate.toISOString(),
+        expirationDate: expirationDate.toISOString(),
+        status: 'active',
+        logoUrl: service.logoUrl,
+        description: service.description,
+        userEmail: req.session.userEmail
+      };
+
+      const subscription = await storage.createSubscription(subscriptionData);
+      res.status(201).json(subscription);
+    } catch (error: any) {
+      if (error.issues) {
+        return res.status(400).json({ message: "Validation failed", errors: error.issues });
+      }
+      res.status(500).json({ message: "Failed to subscribe to service" });
+    }
+  });
+
+  // Available streaming services marketplace
+  app.get("/api/available-services", async (req, res) => {
+    try {
+      const services = await storage.getAllAvailableServices();
+      res.json(services);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch available services" });
+    }
+  });
+
+  app.get("/api/available-services/:id", async (req, res) => {
+    try {
+      const service = await storage.getAvailableService(req.params.id);
+      if (!service) {
+        return res.status(404).json({ message: "Service not found" });
+      }
+      res.json(service);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch service" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

@@ -1,6 +1,6 @@
-import { type Subscription, type InsertSubscription, type User, type InsertUser, users, subscriptions } from "@shared/schema";
+import { type Subscription, type InsertSubscription, type User, type InsertUser, type AvailableService, users, subscriptions, availableServices } from "@shared/schema";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql, lte } from "drizzle-orm";
 
 export interface IStorage {
   // User management
@@ -11,9 +11,14 @@ export interface IStorage {
   // Subscription management (user-specific)
   getSubscription(id: string, userEmail: string): Promise<Subscription | undefined>;
   getAllSubscriptions(userEmail: string): Promise<Subscription[]>;
+  getExpiringSubscriptions(userEmail: string, daysAhead: number): Promise<Subscription[]>;
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
   updateSubscription(id: string, subscription: Partial<InsertSubscription>, userEmail: string): Promise<Subscription | undefined>;
   deleteSubscription(id: string, userEmail: string): Promise<boolean>;
+
+  // Available services marketplace
+  getAllAvailableServices(): Promise<AvailableService[]>;
+  getAvailableService(id: string): Promise<AvailableService | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -58,6 +63,7 @@ export class DatabaseStorage implements IStorage {
       .values({
         ...insertSubscription,
         renewalDate: new Date(insertSubscription.renewalDate),
+        expirationDate: insertSubscription.expirationDate ? new Date(insertSubscription.expirationDate) : null,
         lastUsed: new Date(),
       })
       .returning();
@@ -68,6 +74,7 @@ export class DatabaseStorage implements IStorage {
     const processedData = {
       ...updateData,
       renewalDate: updateData.renewalDate ? new Date(updateData.renewalDate) : undefined,
+      expirationDate: updateData.expirationDate ? new Date(updateData.expirationDate) : undefined,
     };
 
     const [updated] = await db
@@ -86,6 +93,37 @@ export class DatabaseStorage implements IStorage {
       .returning({ id: subscriptions.id });
     
     return result.length > 0;
+  }
+
+  // Enhanced expiration tracking
+  async getExpiringSubscriptions(userEmail: string, daysAhead: number): Promise<Subscription[]> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() + daysAhead);
+    
+    return await db
+      .select()
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.userEmail, userEmail),
+          subscriptions.expirationDate ? lte(subscriptions.expirationDate, cutoffDate) : sql`false`
+        )
+      );
+  }
+
+  // Available services marketplace
+  async getAllAvailableServices(): Promise<AvailableService[]> {
+    return await db
+      .select()
+      .from(availableServices);
+  }
+
+  async getAvailableService(id: string): Promise<AvailableService | undefined> {
+    const [service] = await db
+      .select()
+      .from(availableServices)
+      .where(eq(availableServices.id, id));
+    return service || undefined;
   }
 }
 
