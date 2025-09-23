@@ -44,6 +44,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
 
 export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
   id: true,
+  userEmail: true, // Exclude userEmail - added server-side from session
 }).extend({
   cost: z.string().min(1, "Cost is required"),
   renewalDate: z.string().min(1, "Renewal date is required"),

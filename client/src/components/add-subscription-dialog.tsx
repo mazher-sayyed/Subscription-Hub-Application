@@ -52,11 +52,12 @@ export default function AddSubscriptionDialog({ open, onOpenChange }: AddSubscri
 
   useEffect(() => {
     if (createMutation.isError) {
+      console.error('Mutation failed:', createMutation.error);
       toast({ title: "Failed to add subscription", variant: "destructive" });
     }
-  }, [createMutation.isError, toast]);
+  }, [createMutation.isError, createMutation.error, toast]);
 
-  const onSubmit = (data: InsertSubscription) => {
+  const onSubmit = async (data: InsertSubscription) => {
     createMutation.mutate(data);
   };
 
@@ -89,7 +90,7 @@ export default function AddSubscriptionDialog({ open, onOpenChange }: AddSubscri
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Category</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value || ""}>
                     <FormControl>
                       <SelectTrigger data-testid="select-category">
                         <SelectValue placeholder="Select category" />
@@ -131,7 +132,7 @@ export default function AddSubscriptionDialog({ open, onOpenChange }: AddSubscri
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Billing Cycle</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || "monthly"}>
                       <FormControl>
                         <SelectTrigger data-testid="select-billing-cycle">
                           <SelectValue />

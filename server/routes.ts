@@ -31,11 +31,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user = await storage.createUser(validatedData);
       }
 
-      // Set session
-      req.session.userEmail = user.email;
-      req.session.userId = user.id;
-
-      res.json({ user: { email: user.email, name: user.name } });
+      // Regenerate session to prevent session fixation attacks
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error('Session regeneration failed:', err);
+          return res.status(500).json({ message: "Login failed - session error" });
+        }
+        
+        // Set session data after regeneration
+        req.session.userEmail = user.email;
+        req.session.userId = user.id;
+        req.session.userName = user.name || "";
+        
+        // Send response after session is set
+        res.json({ user: { email: user.email, name: user.name } });
+      });
     } catch (error: any) {
       if (error.issues) {
         return res.status(400).json({ message: "Validation failed", errors: error.issues });
@@ -53,17 +63,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  app.get("/api/auth/me", (req, res) => {
+  app.get("/api/auth/me", async (req, res) => {
     if (!req.session?.userEmail) {
       return res.status(401).json({ message: "Not authenticated" });
     }
     
-    res.json({ 
-      user: { 
-        email: req.session.userEmail,
-        name: req.session.userName || ""
-      } 
-    });
+    try {
+      // Get fresh user data from database to ensure consistency
+      const user = await storage.getUserByEmail(req.session.userEmail);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
+      res.json({ 
+        user: { 
+          email: user.email,
+          name: user.name || ""
+        } 
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get user info" });
+    }
   });
 
   // Protected subscription routes
@@ -90,10 +110,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/subscriptions", requireAuth, async (req: any, res) => {
     try {
-      const validatedData = insertSubscriptionSchema.parse({
-        ...req.body,
+      // Parse request body first, then add userEmail from session
+      const body = insertSubscriptionSchema.parse(req.body);
+      const validatedData = {
+        ...body,
         userEmail: req.session.userEmail
-      });
+      };
       const subscription = await storage.createSubscription(validatedData);
       res.status(201).json(subscription);
     } catch (error: any) {
