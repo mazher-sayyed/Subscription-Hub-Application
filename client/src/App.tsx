@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/auth-context";
 import { ProtectedRoute } from "@/components/protected-route";
 import Dashboard from "@/pages/dashboard";
+import Marketplace from "@/pages/marketplace";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -13,6 +14,7 @@ function Router() {
     <ProtectedRoute>
       <Switch>
         <Route path="/" component={Dashboard} />
+        <Route path="/marketplace" component={Marketplace} />
         <Route component={NotFound} />
       </Switch>
     </ProtectedRoute>

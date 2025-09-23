@@ -1,6 +1,6 @@
 import { type Subscription, type InsertSubscription, type User, type InsertUser, type AvailableService, users, subscriptions, availableServices } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, sql, lte } from "drizzle-orm";
+import { eq, and, sql, lte, gte, isNotNull } from "drizzle-orm";
 
 export interface IStorage {
   // User management
@@ -97,6 +97,7 @@ export class DatabaseStorage implements IStorage {
 
   // Enhanced expiration tracking
   async getExpiringSubscriptions(userEmail: string, daysAhead: number): Promise<Subscription[]> {
+    const today = new Date();
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() + daysAhead);
     
@@ -106,7 +107,9 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(subscriptions.userEmail, userEmail),
-          subscriptions.expirationDate ? lte(subscriptions.expirationDate, cutoffDate) : sql`false`
+          isNotNull(subscriptions.expirationDate),
+          gte(subscriptions.expirationDate, today), // Only future expirations
+          lte(subscriptions.expirationDate, cutoffDate) // Within the specified days
         )
       );
   }
