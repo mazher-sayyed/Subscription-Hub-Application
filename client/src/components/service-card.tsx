@@ -23,10 +23,7 @@ export default function ServiceCard({ service, "data-testid": testId }: ServiceC
 
   const subscriptionMutation = useMutation({
     mutationFn: async (data: { serviceId: string; planId: string }) => {
-      return await apiRequest("/api/subscriptions/subscribe", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      return await apiRequest("POST", "/api/subscriptions/subscribe", data);
     },
     onSuccess: () => {
       // Invalidate both subscriptions and expiring subscriptions caches
