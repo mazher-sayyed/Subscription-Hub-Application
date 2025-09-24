@@ -175,7 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expirationDate.setMonth(expirationDate.getMonth() + 1);
       }
       
-      // Create subscription with auto-populated data
+      // Create subscription with auto-populated data  
       const subscriptionData = {
         name: `${service.name} - ${selectedPlan.name}`,
         category: service.category,

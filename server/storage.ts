@@ -68,12 +68,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSubscription(insertSubscription: InsertSubscription, userEmail: string): Promise<Subscription> {
+    const processedData = {
+      ...insertSubscription,
+      renewalDate: insertSubscription.renewalDate ? new Date(insertSubscription.renewalDate) : undefined,
+      expirationDate: insertSubscription.expirationDate ? new Date(insertSubscription.expirationDate) : undefined,
+      userEmail
+    };
+    
     const [subscription] = await db
       .insert(subscriptions)
-      .values({
-        ...insertSubscription,
-        userEmail
-      })
+      .values(processedData)
       .returning();
     return subscription;
   }
