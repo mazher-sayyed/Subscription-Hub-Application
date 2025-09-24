@@ -46,6 +46,12 @@ export function attachUser(storage: any) {
     req.isAuthenticated = false;
     req.currentUser = undefined;
 
+    console.log('=== ATTACH USER DEBUG ===');
+    console.log('Session ID:', req.sessionID);
+    console.log('Session exists:', !!req.session);
+    console.log('Session data:', req.session);
+    console.log('========================');
+
     if (req.session?.userId && req.session?.isAuthenticated) {
       try {
         const user = await storage.getUserById(req.session.userId);
