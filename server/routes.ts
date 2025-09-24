@@ -2,19 +2,11 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertSubscriptionSchema, insertUserSchema } from "@shared/schema";
-import "./types"; // Import session type extensions
-
-// Authentication middleware
-const requireAuth = (req: any, res: any, next: any) => {
-  if (!req.session?.userEmail) {
-    return res.status(401).json({ message: "Authentication required" });
-  }
-  next();
-};
+import { requireAuth, loginUser, logoutUser, type AuthenticatedRequest } from "./auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Authentication routes
-  app.post("/api/auth/login", async (req, res) => {
+  // Authentication routes - completely rewritten
+  app.post("/api/auth/login", async (req: AuthenticatedRequest, res) => {
     try {
       const { email, name } = req.body;
       
@@ -22,31 +14,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Email is required" });
       }
 
-      // Check if user exists
-      let user = await storage.getUserByEmail(email);
+      // Use the new login helper from auth module
+      const user = await loginUser(req, storage, email, name);
       
-      if (!user) {
-        // Create new user
-        const validatedData = insertUserSchema.parse({ email, name: name || "" });
-        user = await storage.createUser(validatedData);
-      }
-
-      // Regenerate session to prevent session fixation attacks
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error('Session regeneration failed:', err);
-          return res.status(500).json({ message: "Login failed - session error" });
-        }
-        
-        // Set session data after regeneration
-        req.session.userEmail = user.email;
-        req.session.userId = user.id;
-        req.session.userName = user.name || "";
-        
-        // Send response after session is set
-        res.json({ user: { email: user.email, name: user.name } });
+      res.json({ 
+        user: { 
+          id: user.id,
+          email: user.email, 
+          name: user.name 
+        },
+        authenticated: true
       });
     } catch (error: any) {
+      console.error('Login error:', error);
       if (error.issues) {
         return res.status(400).json({ message: "Validation failed", errors: error.issues });
       }
@@ -54,42 +34,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy((err: any) => {
-      if (err) {
-        return res.status(500).json({ message: "Failed to logout" });
-      }
-      res.json({ message: "Logged out successfully" });
+  app.post("/api/auth/logout", async (req: AuthenticatedRequest, res) => {
+    try {
+      await logoutUser(req);
+      res.json({ message: "Logged out successfully", authenticated: false });
+    } catch (error) {
+      console.error('Logout error:', error);
+      res.status(500).json({ message: "Failed to logout" });
+    }
+  });
+
+  app.get("/api/auth/me", async (req: AuthenticatedRequest, res) => {
+    if (!req.isAuthenticated || !req.currentUser) {
+      return res.status(401).json({ 
+        message: "Not authenticated", 
+        authenticated: false 
+      });
+    }
+    
+    res.json({ 
+      user: {
+        id: req.currentUser.id,
+        email: req.currentUser.email,
+        name: req.currentUser.name
+      },
+      authenticated: true
     });
   });
 
-  app.get("/api/auth/me", async (req, res) => {
-    if (!req.session?.userEmail) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-    
+  // Protected subscription routes - rewritten with new auth
+  app.get("/api/subscriptions", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      // Get fresh user data from database to ensure consistency
-      const user = await storage.getUserByEmail(req.session.userEmail);
-      if (!user) {
-        return res.status(401).json({ message: "User not found" });
-      }
-      
-      res.json({ 
-        user: { 
-          email: user.email,
-          name: user.name || ""
-        } 
-      });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to get user info" });
-    }
-  });
-
-  // Protected subscription routes
-  app.get("/api/subscriptions", requireAuth, async (req: any, res) => {
-    try {
-      const subscriptions = await storage.getAllSubscriptions(req.session.userEmail);
+      const subscriptions = await storage.getAllSubscriptions(req.currentUser!.email);
       res.json(subscriptions);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch subscriptions" });
@@ -97,19 +73,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get expiring subscriptions - MUST come before /:id route
-  app.get("/api/subscriptions/expiring", requireAuth, async (req: any, res) => {
+  app.get("/api/subscriptions/expiring", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const days = parseInt(req.query.days as string) || 30; // Default to 30 days
-      const expiringSubscriptions = await storage.getExpiringSubscriptions(req.session.userEmail, days);
+      const expiringSubscriptions = await storage.getExpiringSubscriptions(req.currentUser!.email, days);
       res.json(expiringSubscriptions);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch expiring subscriptions" });
     }
   });
 
-  app.get("/api/subscriptions/:id", requireAuth, async (req: any, res) => {
+  app.get("/api/subscriptions/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const subscription = await storage.getSubscription(req.params.id, req.session.userEmail);
+      const subscription = await storage.getSubscription(req.params.id, req.currentUser!.email);
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
@@ -119,15 +95,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/subscriptions", requireAuth, async (req: any, res) => {
+  app.post("/api/subscriptions", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      // Parse request body first, then add userEmail from session
-      const body = insertSubscriptionSchema.parse(req.body);
-      const validatedData = {
-        ...body,
-        userEmail: req.session.userEmail
-      };
-      const subscription = await storage.createSubscription(validatedData);
+      // Parse request body (userEmail excluded from schema, added by storage)
+      const validatedData = insertSubscriptionSchema.parse(req.body);
+      const subscription = await storage.createSubscription(validatedData, req.currentUser!.email);
       res.status(201).json(subscription);
     } catch (error: any) {
       if (error.issues) {
@@ -137,13 +109,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/subscriptions/:id", requireAuth, async (req: any, res) => {
+  app.patch("/api/subscriptions/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       // Validate partial data (userEmail already excluded from insertSubscriptionSchema)
       const partialSchema = insertSubscriptionSchema.partial();
       const validatedData = partialSchema.parse(req.body);
       
-      const subscription = await storage.updateSubscription(req.params.id, validatedData, req.session.userEmail);
+      const subscription = await storage.updateSubscription(req.params.id, validatedData, req.currentUser!.email);
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
@@ -156,9 +128,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/subscriptions/:id", requireAuth, async (req: any, res) => {
+  app.delete("/api/subscriptions/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const deleted = await storage.deleteSubscription(req.params.id, req.session.userEmail);
+      const deleted = await storage.deleteSubscription(req.params.id, req.currentUser!.email);
       if (!deleted) {
         return res.status(404).json({ message: "Subscription not found" });
       }
@@ -170,7 +142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // One-click subscription from marketplace
-  app.post("/api/subscriptions/subscribe", requireAuth, async (req: any, res) => {
+  app.post("/api/subscriptions/subscribe", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const { serviceId, planId } = req.body;
       
@@ -214,12 +186,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'active',
         logoUrl: service.logoUrl,
         description: service.description,
-        userEmail: req.session.userEmail
+
       };
 
-      const subscription = await storage.createSubscription(subscriptionData);
+      const subscription = await storage.createSubscription(subscriptionData, req.currentUser!.email);
       res.status(201).json(subscription);
     } catch (error: any) {
+      console.error('Subscription error:', error);
+      console.error('Error stack:', error.stack);
+      console.error('Error message:', error.message);
       if (error.issues) {
         return res.status(400).json({ message: "Validation failed", errors: error.issues });
       }
@@ -250,12 +225,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Service launch tracking
-  app.post("/api/subscriptions/:id/launch", requireAuth, async (req: any, res) => {
+  app.post("/api/subscriptions/:id/launch", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const subscriptionId = req.params.id;
       
       // Get subscription to verify ownership and get service name
-      const subscription = await storage.getSubscription(subscriptionId, req.session.userEmail);
+      const subscription = await storage.getSubscription(subscriptionId, req.currentUser!.email);
       if (!subscription) {
         return res.status(404).json({ message: "Subscription not found" });
       }
@@ -263,12 +238,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Track the launch
       const launch = await storage.trackServiceLaunch({
         subscriptionId,
-        userEmail: req.session.userEmail,
+        userEmail: req.currentUser!.email,
         serviceName: subscription.name
       });
       
       // Update lastUsed timestamp
-      await storage.updateSubscription(subscriptionId, { lastUsed: new Date() }, req.session.userEmail);
+      await storage.updateSubscription(subscriptionId, { lastUsed: new Date() }, req.currentUser!.email);
       
       res.json({ success: true, launch });
     } catch (error) {
@@ -278,9 +253,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get user launch statistics
-  app.get("/api/users/launch-stats", requireAuth, async (req: any, res) => {
+  app.get("/api/users/launch-stats", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const stats = await storage.getUserLaunchStats(req.session.userEmail);
+      const stats = await storage.getUserLaunchStats(req.currentUser!.email);
       res.json(stats);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch launch stats" });

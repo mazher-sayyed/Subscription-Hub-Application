@@ -2,16 +2,26 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 
-interface User {
+// User type
+export interface User {
+  id: string;
   email: string;
-  name: string;
+  name?: string;
+}
+
+// Auth response types
+interface AuthResponse {
+  user: User;
+  authenticated: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
   login: (email: string, name?: string) => Promise<void>;
   logout: () => Promise<void>;
-  isLoading: boolean;
+  refetchAuth: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,63 +40,107 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const queryClient = useQueryClient();
 
-  // Check if user is logged in
-  const { data: authData, isLoading: isCheckingAuth, error } = useQuery<{ user: User } | null>({
+  // Authentication state query
+  const authQuery = useQuery({
     queryKey: ['/api/auth/me'],
-    retry: false,
-    staleTime: 60000, // Cache for 1 minute instead of infinity
-    refetchOnWindowFocus: true, // Re-check auth on focus
-    queryFn: async () => {
+    queryFn: async (): Promise<AuthResponse | null> => {
       try {
-        const res = await fetch('/api/auth/me', { credentials: 'include' });
-        if (res.status === 401) return null;
-        if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
-        return await res.json();
-      } catch {
+        const response = await fetch('/api/auth/me', { 
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.status === 401) {
+          return null;
+        }
+        
+        if (!response.ok) {
+          throw new Error(`Authentication check failed: ${response.status}`);
+        }
+        
+        return await response.json();
+      } catch (error) {
+        console.error('Auth check failed:', error);
         return null;
       }
-    }
+    },
+    retry: false,
+    staleTime: 30000, // 30 seconds
+    refetchOnWindowFocus: true,
+    refetchInterval: 60000, // Refresh every minute
   });
 
+  // Update auth state when query data changes
   useEffect(() => {
-    if (authData?.user) {
+    const authData = authQuery.data;
+    
+    if (authData?.user && authData.authenticated) {
       setUser(authData.user);
-    } else if (!isCheckingAuth && (error || authData === null)) {
-      // Only set user to null after auth check is complete
+      setIsAuthenticated(true);
+    } else if (!authQuery.isLoading) {
+      // Only clear auth state after loading is complete
       setUser(null);
+      setIsAuthenticated(false);
     }
-  }, [authData, error, isCheckingAuth]);
+  }, [authQuery.data, authQuery.isLoading]);
 
-  const loginMutation = useMutation<{ user: User }, Error, { email: string; name?: string }>({
-    mutationFn: async ({ email, name }) => {
+  // Login mutation
+  const loginMutation = useMutation({
+    mutationFn: async ({ email, name }: { email: string; name?: string }): Promise<AuthResponse> => {
       const response = await apiRequest('POST', '/api/auth/login', { email, name });
-      return response.json();
-    }
-  });
-
-  useEffect(() => {
-    if (loginMutation.data?.user) {
-      setUser(loginMutation.data.user);
-      queryClient.invalidateQueries({ queryKey: ['/api/subscriptions'] });
-    }
-  }, [loginMutation.data, queryClient]);
-
-  const logoutMutation = useMutation<{ message: string }, Error, void>({
-    mutationFn: async () => {
-      const response = await apiRequest('POST', '/api/auth/logout');
-      return response.json();
-    }
-  });
-
-  useEffect(() => {
-    if (logoutMutation.isSuccess) {
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Login failed' }));
+        throw new Error(error.message || 'Login failed');
+      }
+      
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      if (data.user && data.authenticated) {
+        setUser(data.user);
+        setIsAuthenticated(true);
+        // Invalidate all queries to refresh data for the new user
+        queryClient.invalidateQueries();
+      }
+    },
+    onError: (error) => {
+      console.error('Login failed:', error);
       setUser(null);
+      setIsAuthenticated(false);
+    }
+  });
+
+  // Logout mutation
+  const logoutMutation = useMutation({
+    mutationFn: async (): Promise<void> => {
+      const response = await apiRequest('POST', '/api/auth/logout');
+      
+      if (!response.ok) {
+        throw new Error('Logout failed');
+      }
+    },
+    onSuccess: () => {
+      setUser(null);
+      setIsAuthenticated(false);
+      // Clear all cached data
+      queryClient.clear();
+    },
+    onError: (error) => {
+      console.error('Logout failed:', error);
+      // Even if logout fails on server, clear local state
+      setUser(null);
+      setIsAuthenticated(false);
       queryClient.clear();
     }
-  }, [logoutMutation.isSuccess, queryClient]);
+  });
 
+  // Auth actions
   const login = async (email: string, name?: string) => {
     await loginMutation.mutateAsync({ email, name });
   };
@@ -95,10 +149,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await logoutMutation.mutateAsync();
   };
 
-  const isLoading = isCheckingAuth || loginMutation.isPending || logoutMutation.isPending;
+  const refetchAuth = () => {
+    authQuery.refetch();
+  };
+
+  const isLoading = authQuery.isLoading || loginMutation.isPending || logoutMutation.isPending;
+
+  const contextValue: AuthContextType = {
+    user,
+    isAuthenticated,
+    isLoading,
+    login,
+    logout,
+    refetchAuth
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

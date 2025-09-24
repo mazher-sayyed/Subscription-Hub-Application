@@ -5,6 +5,7 @@ import { eq, and, sql, lte, gte, isNotNull } from "drizzle-orm";
 export interface IStorage {
   // User management
   getUser(id: string): Promise<User | undefined>;
+  getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
@@ -12,7 +13,7 @@ export interface IStorage {
   getSubscription(id: string, userEmail: string): Promise<Subscription | undefined>;
   getAllSubscriptions(userEmail: string): Promise<Subscription[]>;
   getExpiringSubscriptions(userEmail: string, daysAhead: number): Promise<Subscription[]>;
-  createSubscription(subscription: InsertSubscription): Promise<Subscription>;
+  createSubscription(subscription: InsertSubscription, userEmail: string): Promise<Subscription>;
   updateSubscription(id: string, subscription: Partial<InsertSubscription>, userEmail: string): Promise<Subscription | undefined>;
   deleteSubscription(id: string, userEmail: string): Promise<boolean>;
 
@@ -28,6 +29,11 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   // User management
   async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user || undefined;
   }
@@ -61,14 +67,12 @@ export class DatabaseStorage implements IStorage {
       .where(eq(subscriptions.userEmail, userEmail));
   }
 
-  async createSubscription(insertSubscription: InsertSubscription): Promise<Subscription> {
+  async createSubscription(insertSubscription: InsertSubscription, userEmail: string): Promise<Subscription> {
     const [subscription] = await db
       .insert(subscriptions)
       .values({
         ...insertSubscription,
-        renewalDate: new Date(insertSubscription.renewalDate),
-        expirationDate: insertSubscription.expirationDate ? new Date(insertSubscription.expirationDate) : null,
-        lastUsed: new Date(),
+        userEmail
       })
       .returning();
     return subscription;

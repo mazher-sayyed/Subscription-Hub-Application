@@ -2,27 +2,18 @@ import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { sessionConfig, attachUser } from "./auth";
+import { storage } from "./storage";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Session configuration - Require SESSION_SECRET in production
-if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
-  throw new Error('SESSION_SECRET environment variable is required in production');
-}
+// Enhanced session middleware with persistent storage
+app.use(session(sessionConfig));
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback-secret-key-development-only',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production', // Use HTTPS in production
-    httpOnly: true,
-    sameSite: 'lax', // CSRF protection
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
+// Attach authenticated user to all requests
+app.use(attachUser(storage) as any);
 
 app.use((req, res, next) => {
   const start = Date.now();
