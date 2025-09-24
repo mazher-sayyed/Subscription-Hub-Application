@@ -139,8 +139,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/subscriptions/:id", requireAuth, async (req: any, res) => {
     try {
-      // Validate partial data
-      const partialSchema = insertSubscriptionSchema.partial().omit({ userEmail: true });
+      // Validate partial data (userEmail already excluded from insertSubscriptionSchema)
+      const partialSchema = insertSubscriptionSchema.partial();
       const validatedData = partialSchema.parse(req.body);
       
       const subscription = await storage.updateSubscription(req.params.id, validatedData, req.session.userEmail);
@@ -268,7 +268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Update lastUsed timestamp
-      await storage.updateSubscription(subscriptionId, { lastUsed: new Date().toISOString() }, req.session.userEmail);
+      await storage.updateSubscription(subscriptionId, { lastUsed: new Date() }, req.session.userEmail);
       
       res.json({ success: true, launch });
     } catch (error) {
