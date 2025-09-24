@@ -1,4 +1,4 @@
-import { type Subscription, type InsertSubscription, type User, type InsertUser, type AvailableService, users, subscriptions, availableServices } from "@shared/schema";
+import { type Subscription, type InsertSubscription, type User, type InsertUser, type AvailableService, type ServiceLaunch, type InsertServiceLaunch, users, subscriptions, availableServices, serviceLaunches } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, lte, gte, isNotNull } from "drizzle-orm";
 
@@ -19,6 +19,10 @@ export interface IStorage {
   // Available services marketplace
   getAllAvailableServices(): Promise<AvailableService[]>;
   getAvailableService(id: string): Promise<AvailableService | undefined>;
+  
+  // Service launch tracking
+  trackServiceLaunch(launch: InsertServiceLaunch): Promise<ServiceLaunch>;
+  getUserLaunchStats(userEmail: string): Promise<{ serviceName: string; launchCount: number; lastLaunched: Date }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -127,6 +131,34 @@ export class DatabaseStorage implements IStorage {
       .from(availableServices)
       .where(eq(availableServices.id, id));
     return service || undefined;
+  }
+
+  // Service launch tracking
+  async trackServiceLaunch(insertLaunch: InsertServiceLaunch): Promise<ServiceLaunch> {
+    const [launch] = await db
+      .insert(serviceLaunches)
+      .values(insertLaunch)
+      .returning();
+    return launch;
+  }
+
+  async getUserLaunchStats(userEmail: string): Promise<{ serviceName: string; launchCount: number; lastLaunched: Date }[]> {
+    const results = await db
+      .select({
+        serviceName: serviceLaunches.serviceName,
+        launchCount: sql<number>`count(*)`,
+        lastLaunched: sql<Date>`max(${serviceLaunches.launchedAt})`,
+      })
+      .from(serviceLaunches)
+      .where(eq(serviceLaunches.userEmail, userEmail))
+      .groupBy(serviceLaunches.serviceName)
+      .orderBy(sql`max(${serviceLaunches.launchedAt}) desc`);
+    
+    return results.map(result => ({
+      serviceName: result.serviceName,
+      launchCount: Number(result.launchCount),
+      lastLaunched: result.lastLaunched,
+    }));
   }
 }
 

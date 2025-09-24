@@ -51,7 +51,17 @@ export const availableServices = pgTable("available_services", {
   plans: json("plans").$type<PricingPlan[]>().notNull(), // Array of pricing plans
   isPopular: boolean("is_popular").default(false),
   features: json("features").$type<string[]>().notNull(), // Array of feature strings
+  launchUrl: text("launch_url"), // Direct URL to launch the service
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+// Usage tracking for service launches
+export const serviceLaunches = pgTable("service_launches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  subscriptionId: varchar("subscription_id").notNull(),
+  userEmail: text("user_email").notNull(),
+  serviceName: text("service_name").notNull(),
+  launchedAt: timestamp("launched_at").notNull().default(sql`now()`),
 });
 
 // Relations
@@ -85,9 +95,16 @@ export const insertAvailableServiceSchema = createInsertSchema(availableServices
   createdAt: true,
 });
 
+export const insertServiceLaunchSchema = createInsertSchema(serviceLaunches).omit({
+  id: true,
+  launchedAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type AvailableService = typeof availableServices.$inferSelect;
 export type InsertAvailableService = z.infer<typeof insertAvailableServiceSchema>;
+export type ServiceLaunch = typeof serviceLaunches.$inferSelect;
+export type InsertServiceLaunch = z.infer<typeof insertServiceLaunchSchema>;

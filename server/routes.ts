@@ -249,6 +249,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Service launch tracking
+  app.post("/api/subscriptions/:id/launch", requireAuth, async (req: any, res) => {
+    try {
+      const subscriptionId = req.params.id;
+      
+      // Get subscription to verify ownership and get service name
+      const subscription = await storage.getSubscription(subscriptionId, req.session.userEmail);
+      if (!subscription) {
+        return res.status(404).json({ message: "Subscription not found" });
+      }
+      
+      // Track the launch
+      const launch = await storage.trackServiceLaunch({
+        subscriptionId,
+        userEmail: req.session.userEmail,
+        serviceName: subscription.name
+      });
+      
+      // Update lastUsed timestamp
+      await storage.updateSubscription(subscriptionId, { lastUsed: new Date().toISOString() }, req.session.userEmail);
+      
+      res.json({ success: true, launch });
+    } catch (error) {
+      console.error('Launch tracking error:', error);
+      res.status(500).json({ message: "Failed to track launch" });
+    }
+  });
+  
+  // Get user launch statistics
+  app.get("/api/users/launch-stats", requireAuth, async (req: any, res) => {
+    try {
+      const stats = await storage.getUserLaunchStats(req.session.userEmail);
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch launch stats" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

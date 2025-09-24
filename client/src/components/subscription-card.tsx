@@ -4,10 +4,11 @@ import { type Subscription } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BarChart3, Edit, X, RotateCcw, Trash2 } from "lucide-react";
+import { BarChart3, Edit, X, RotateCcw, Trash2, ExternalLink, Play } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import EditSubscriptionDialog from "./edit-subscription-dialog";
+import { launchService } from "@/utils/launch-helpers";
 
 interface SubscriptionCardProps {
   subscription: Subscription;
@@ -17,6 +18,7 @@ export default function SubscriptionCard({ subscription }: SubscriptionCardProps
   const [showEditDialog, setShowEditDialog] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [isLaunching, setIsLaunching] = useState(false);
 
   const updateStatusMutation = useMutation({
     mutationFn: async (newStatus: string) => {
@@ -78,6 +80,35 @@ export default function SubscriptionCard({ subscription }: SubscriptionCardProps
     }
   };
 
+  const handleLaunch = async () => {
+    setIsLaunching(true);
+    try {
+      const success = await launchService(subscription.id, subscription.name);
+      if (success) {
+        toast({
+          title: "Service Launched",
+          description: `Opened ${subscription.name} in a new tab`,
+        });
+        // Refresh subscriptions to update lastUsed timestamp
+        queryClient.invalidateQueries({ queryKey: ["/api/subscriptions"] });
+      } else {
+        toast({
+          title: "Launch Failed", 
+          description: "Unable to launch this service",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Launch Error",
+        description: "Failed to launch service. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLaunching(false);
+    }
+  };
+
   return (
     <>
       <Card className="bg-card rounded-lg border border-border shadow-sm hover:shadow-md transition-shadow" data-testid={`card-subscription-${subscription.id}`}>
@@ -112,15 +143,39 @@ export default function SubscriptionCard({ subscription }: SubscriptionCardProps
           </p>
           
           <div className="flex space-x-2">
-            <Button 
-              variant="default" 
-              size="sm" 
-              className="flex-1"
-              data-testid={`button-usage-${subscription.id}`}
-            >
-              <BarChart3 className="mr-1 h-3 w-3" />
-              Usage
-            </Button>
+            {subscription.status === "active" ? (
+              <Button 
+                variant="default" 
+                size="sm" 
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                onClick={handleLaunch}
+                disabled={isLaunching}
+                data-testid={`button-launch-${subscription.id}`}
+              >
+                {isLaunching ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border border-white border-t-transparent mr-1" />
+                    Launching...
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-1 h-3 w-3" />
+                    Launch
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="flex-1"
+                disabled
+                data-testid={`button-launch-disabled-${subscription.id}`}
+              >
+                <ExternalLink className="mr-1 h-3 w-3" />
+                Inactive
+              </Button>
+            )}
             
             <Button 
               variant="secondary" 
