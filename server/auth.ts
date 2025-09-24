@@ -17,10 +17,11 @@ export const sessionConfig = {
     stale: false // Don't serve stale sessions
   }),
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
+    secure: false, // Allow non-HTTPS in development
+    httpOnly: false, // Allow client access for debugging
     maxAge: 86400000, // 24 hours
-    sameSite: 'lax' as const
+    sameSite: 'none' as const, // More permissive for development
+    domain: undefined // Don't restrict domain
   },
   name: 'streaming.session' // Custom session name
 };
@@ -46,11 +47,6 @@ export function attachUser(storage: any) {
     req.isAuthenticated = false;
     req.currentUser = undefined;
 
-    console.log('=== ATTACH USER DEBUG ===');
-    console.log('Session ID:', req.sessionID);
-    console.log('Session exists:', !!req.session);
-    console.log('Session data:', req.session);
-    console.log('========================');
 
     if (req.session?.userId && req.session?.isAuthenticated) {
       try {
@@ -75,22 +71,12 @@ export function attachUser(storage: any) {
 
 // Authentication middleware for protected routes
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  console.log('=== REQUIRE AUTH DEBUG ===');
-  console.log('URL:', req.url);
-  console.log('Method:', req.method);
-  console.log('Session ID:', req.sessionID);
-  console.log('Is authenticated:', req.isAuthenticated);
-  console.log('Current user exists:', !!req.currentUser);
-  console.log('=========================');
-  
   if (!req.isAuthenticated || !req.currentUser) {
-    console.log('❌ AUTHENTICATION FAILED');
     return res.status(401).json({ 
       message: 'Authentication required',
       authenticated: false 
     });
   }
-  console.log('✅ AUTHENTICATION PASSED');
   next();
 }
 
