@@ -7,6 +7,7 @@ import { requireAuth, loginUser, logoutUser, type AuthenticatedRequest } from ".
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes - completely rewritten
   app.post("/api/auth/login", async (req, res) => {
+    console.log('🔐 LOGIN ATTEMPT:', req.body);
     try {
       const { email, name } = req.body;
       
