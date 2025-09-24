@@ -143,6 +143,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // One-click subscription from marketplace
   app.post("/api/subscriptions/subscribe", requireAuth, async (req: AuthenticatedRequest, res) => {
+    console.log('=== SUBSCRIPTION DEBUG ===');
+    console.log('Session ID:', req.sessionID);
+    console.log('Session data:', req.session);
+    console.log('Is authenticated:', req.isAuthenticated);
+    console.log('Current user:', req.currentUser);
+    console.log('Request body:', req.body);
+    console.log('========================');
     try {
       const { serviceId, planId } = req.body;
       

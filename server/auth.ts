@@ -69,12 +69,22 @@ export function attachUser(storage: any) {
 
 // Authentication middleware for protected routes
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  console.log('=== REQUIRE AUTH DEBUG ===');
+  console.log('URL:', req.url);
+  console.log('Method:', req.method);
+  console.log('Session ID:', req.sessionID);
+  console.log('Is authenticated:', req.isAuthenticated);
+  console.log('Current user exists:', !!req.currentUser);
+  console.log('=========================');
+  
   if (!req.isAuthenticated || !req.currentUser) {
+    console.log('❌ AUTHENTICATION FAILED');
     return res.status(401).json({ 
       message: 'Authentication required',
       authenticated: false 
     });
   }
+  console.log('✅ AUTHENTICATION PASSED');
   next();
 }
 
