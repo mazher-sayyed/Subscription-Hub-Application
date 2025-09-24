@@ -36,7 +36,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const { data: authData, isLoading: isCheckingAuth, error } = useQuery<{ user: User } | null>({
     queryKey: ['/api/auth/me'],
     retry: false,
-    staleTime: Infinity,
+    staleTime: 60000, // Cache for 1 minute instead of infinity
+    refetchOnWindowFocus: true, // Re-check auth on focus
     queryFn: async () => {
       try {
         const res = await fetch('/api/auth/me', { credentials: 'include' });
@@ -52,10 +53,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     if (authData?.user) {
       setUser(authData.user);
-    } else if (error || authData === null) {
+    } else if (!isCheckingAuth && (error || authData === null)) {
+      // Only set user to null after auth check is complete
       setUser(null);
     }
-  }, [authData, error]);
+  }, [authData, error, isCheckingAuth]);
 
   const loginMutation = useMutation<{ user: User }, Error, { email: string; name?: string }>({
     mutationFn: async ({ email, name }) => {

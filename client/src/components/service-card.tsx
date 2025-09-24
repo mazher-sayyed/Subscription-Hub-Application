@@ -37,9 +37,19 @@ export default function ServiceCard({ service, "data-testid": testId }: ServiceC
       setSelectedPlan("");
     },
     onError: (error: any) => {
+      let title = "Subscription Failed";
+      let description = "Failed to subscribe to the service. Please try again.";
+      
+      if (error.message && error.message.includes("401")) {
+        title = "Authentication Required";
+        description = "Please log in to subscribe to services. Refresh the page and sign in.";
+      } else if (error.message) {
+        description = error.message;
+      }
+      
       toast({
-        title: "Subscription Failed",
-        description: error.message || "Failed to subscribe to the service. Please try again.",
+        title,
+        description,
         variant: "destructive",
       });
     },
